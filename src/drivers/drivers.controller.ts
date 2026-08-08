@@ -21,6 +21,7 @@ import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 import { DriversQueryDto } from './dto/drivers-query.dto';
 import { UpdateDriverStatusDto } from './dto/update-driver-status.dto';
+import { VerifyDriverDto } from './dto/verify-driver.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { AllowApiKey } from '../common/decorators/allow-api-key.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -40,11 +41,49 @@ export class DriversController {
     return this.driversService.findAll(query);
   }
 
+  /**
+   * Endpoint principal para n8n:
+   * valida cédula + celular (ambos obligatorios).
+   */
+  @Post('verify')
+  @AllowApiKey()
+  @Roles(UserRole.ADMIN)
+  @ApiSecurity('api-key')
+  @ApiOperation({
+    summary: 'Verificar conductor por cédula y celular (n8n / WhatsApp)',
+    description:
+      'Devuelve el conductor solo si cédula y celular coinciden y el estado es ACTIVE.',
+  })
+  verify(@Body() dto: VerifyDriverDto) {
+    return this.driversService.verifyByDocumentAndPhone(
+      dto.document,
+      dto.phone,
+    );
+  }
+
+  @Get('verify')
+  @AllowApiKey()
+  @Roles(UserRole.ADMIN)
+  @ApiSecurity('api-key')
+  @ApiOperation({
+    summary: 'Verificar conductor (GET) por query document + phone',
+  })
+  verifyGet(@Query() query: VerifyDriverDto) {
+    return this.driversService.verifyByDocumentAndPhone(
+      query.document,
+      query.phone,
+    );
+  }
+
   @Get('document/:document')
   @AllowApiKey()
   @Roles(UserRole.ADMIN, UserRole.DRIVER)
   @ApiSecurity('api-key')
-  @ApiOperation({ summary: 'Buscar conductor por cédula (admin / n8n)' })
+  @ApiOperation({
+    summary: 'Buscar conductor solo por cédula (legacy)',
+    description:
+      'Preferir POST /drivers/verify con cédula + celular desde n8n.',
+  })
   findByDocument(@Param('document') document: string) {
     return this.driversService.findByDocument(document);
   }

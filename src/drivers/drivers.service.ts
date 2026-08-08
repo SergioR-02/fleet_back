@@ -79,6 +79,23 @@ export class DriversService {
     };
   }
 
+  /** Solo dígitos, para comparar cédulas/celulares con o sin formato. */
+  private digitsOnly(value: string): string {
+    return value.replace(/\D/g, '');
+  }
+
+  /**
+   * Coincide teléfono exacto o con indicativo de país
+   * (ej. WhatsApp 573001234567 vs BD 3001234567).
+   */
+  private phonesMatch(stored: string, incoming: string): boolean {
+    const a = this.digitsOnly(stored);
+    const b = this.digitsOnly(incoming);
+    if (!a || !b) return false;
+    if (a === b) return true;
+    return a.endsWith(b) || b.endsWith(a);
+  }
+
   async findOne(id: string) {
     const driver = await this.prisma.driver.findUnique({ where: { id } });
     if (!driver) throw new NotFoundException('Driver not found');
@@ -91,6 +108,64 @@ export class DriversService {
     });
     if (!driver) throw new NotFoundException('Driver not found');
     return this.mapDriver(driver);
+  }
+
+  /**
+   * Verificación para n8n / WhatsApp:
+   * exige cédula + celular coincidentes (y preferible ACTIVE).
+   */
+  async verifyByDocumentAndPhone(document: string, phone: string) {
+    const doc = document.trim();
+    const phoneIncoming = phone.trim();
+
+    if (!doc || !phoneIncoming) {
+      throw new NotFoundException('Driver not found');
+    }
+
+    // 1) Buscar por cédula exacta o solo dígitos
+    let driver = await this.prisma.driver.findUnique({
+      where: { document: doc },
+    });
+
+    if (!driver) {
+      const docDigits = this.digitsOnly(doc);
+      if (docDigits) {
+        const candidates = await this.prisma.driver.findMany({
+          where: {
+            OR: [
+              { document: docDigits },
+              { document: { contains: docDigits } },
+            ],
+          },
+          take: 5,
+        });
+        driver =
+          candidates.find(
+            (d) => this.digitsOnly(d.document) === docDigits,
+          ) ?? null;
+      }
+    }
+
+    if (!driver || !this.phonesMatch(driver.phone, phoneIncoming)) {
+      throw new NotFoundException({
+        message: 'Driver not found',
+        errors: [
+          'No hay un conductor activo con esa cédula y celular. Verifique ambos datos.',
+        ],
+      });
+    }
+
+    if (driver.status !== DriverStatus.ACTIVE) {
+      throw new NotFoundException({
+        message: 'Driver not active',
+        errors: ['El conductor existe pero está inactivo.'],
+      });
+    }
+
+    return {
+      verified: true,
+      driver: this.mapDriver(driver),
+    };
   }
 
   async findExpensesByDocument(document: string, page = 1, limit = 10) {
