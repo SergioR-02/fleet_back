@@ -18,8 +18,11 @@ npm-debug.log*
 .DS_Store
 *.swp
 
+# AI agent skill packs (auto-generated; not part of the app)
+.agents/
+.claude/
+.windsurf/
+skills-lock.json
+
 # prisma
 /generated
-
-# tests
-/coverage
