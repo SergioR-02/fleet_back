@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["auth", "fleet", "expenses", "audit"]
+}
+
+// ─── AUTH ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  DRIVER
+
+  @@schema("auth")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         UserRole
+  driverId     String?  @unique @map("driver_id") @db.Uuid
+  driver       Driver?  @relation(fields: [driverId], references: [id])
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  auditLogs    AuditLog[]
+
+  @@map("users")
+  @@schema("auth")
+}
+
+// ─── FLEET ───────────────────────────────────────────────────────────────────
+
+enum DriverStatus {
+  ACTIVE
+  INACTIVE
+
+  @@schema("fleet")
+}
+
+model Driver {
+  id        String       @id @default(uuid()) @db.Uuid
+  document  String       @unique
+  name      String
+  phone     String       @unique
+  email     String?
+  plate     String?
+  status    DriverStatus @default(ACTIVE)
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  user      User?
+  expenses  Expense[]
+
+  @@map("drivers")
+  @@schema("fleet")
+}
+
+// ─── EXPENSES ────────────────────────────────────────────────────────────────
+
+enum ExpenseStatus {
+  PENDING_REVIEW
+  REVIEWED
+  REJECTED
+
+  @@schema("expenses")
+}
+
+enum ExpenseSource {
+  WHATSAPP
+  ADMIN
+  API
+
+  @@schema("expenses")
+}
+
+model Expense {
+  id            String        @id @default(uuid()) @db.Uuid
+  driverId      String        @map("driver_id") @db.Uuid
+  driver        Driver        @relation(fields: [driverId], references: [id])
+  nit           String
+  merchantName  String        @map("merchant_name")
+  amount        Decimal       @db.Decimal(14, 2)
+  expenseDate   DateTime      @map("expense_date") @db.Date
+  description   String?
+  invoiceNumber String?       @map("invoice_number")
+  status        ExpenseStatus @default(PENDING_REVIEW)
+  source        ExpenseSource
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  @@index([driverId])
+  @@index([status])
+  @@index([expenseDate])
+  @@index([merchantName])
+  @@map("expenses")
+  @@schema("expenses")
+}
+
+// ─── AUDIT ───────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String   @map("entity_id")
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+  @@schema("audit")
+}
