@@ -3,6 +3,8 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
+import { ApiErrorCode } from '../common/errors/api-error-codes';
+import { apiError } from '../common/errors/api-error';
 
 @Injectable()
 export class AuthService {
@@ -18,12 +20,16 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException(
+        apiError(ApiErrorCode.INVALID_CREDENTIALS, 'Invalid credentials'),
+      );
     }
 
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException(
+        apiError(ApiErrorCode.INVALID_CREDENTIALS, 'Invalid credentials'),
+      );
     }
 
     const payload = {
