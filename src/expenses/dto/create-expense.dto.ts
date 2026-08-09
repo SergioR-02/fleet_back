@@ -18,6 +18,28 @@ export class CreateExpenseDto {
   @IsUUID()
   driverId: string;
 
+  /**
+   * Obligatorio con API Key: debe coincidir con el conductor de la conversación
+   * y con `driverId` (autorización de la acción).
+   */
+  @ApiPropertyOptional({
+    example: '1020304050',
+    description: 'Cédula del conductor (requerida con API Key)',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(5)
+  document?: string;
+
+  @ApiPropertyOptional({
+    example: '3001234567',
+    description: 'Celular del conductor (requerido con API Key)',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(7)
+  phone?: string;
+
   @ApiProperty({ example: '900123456-1' })
   @IsString()
   @MinLength(3)
@@ -34,7 +56,10 @@ export class CreateExpenseDto {
   @Min(0.01)
   amount: number;
 
-  @ApiProperty({ example: '2026-08-08' })
+  @ApiProperty({
+    example: '2026-08-08',
+    description: 'Fecha del gasto solo día (YYYY-MM-DD). Sin hora ni zona.',
+  })
   @IsDateString()
   expenseDate: string;
 

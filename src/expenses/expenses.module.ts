@@ -2,9 +2,10 @@ import { Module } from '@nestjs/common';
 import { ExpensesService } from './expenses.service';
 import { ExpensesController } from './expenses.controller';
 import { AuditModule } from '../audit/audit.module';
+import { DriversModule } from '../drivers/drivers.module';
 
 @Module({
-  imports: [AuditModule],
+  imports: [AuditModule, DriversModule],
   controllers: [ExpensesController],
   providers: [ExpensesService],
   exports: [ExpensesService],

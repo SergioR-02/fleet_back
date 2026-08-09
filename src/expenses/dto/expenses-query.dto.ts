@@ -1,6 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ExpenseStatus } from '@prisma/client';
-import { IsDateString, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MinLength,
+} from 'class-validator';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 
 export class ExpensesQueryDto extends PaginationQueryDto {
@@ -13,6 +20,26 @@ export class ExpensesQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsUUID()
   driverId?: string;
+
+  /**
+   * n8n / API Key: cédula + celular obligatorios para acotar al conductor
+   * de la conversación (evita listar toda la flota con la API Key).
+   */
+  @ApiPropertyOptional({
+    description: 'Cédula (requerida con API Key junto a phone)',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(5)
+  document?: string;
+
+  @ApiPropertyOptional({
+    description: 'Celular (requerido con API Key junto a document)',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(7)
+  phone?: string;
 
   @ApiPropertyOptional({ enum: ExpenseStatus })
   @IsOptional()
