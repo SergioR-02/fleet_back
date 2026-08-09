@@ -22,11 +22,11 @@ import { UpdateDriverDto } from './dto/update-driver.dto';
 import { DriversQueryDto } from './dto/drivers-query.dto';
 import { UpdateDriverStatusDto } from './dto/update-driver-status.dto';
 import { VerifyDriverDto } from './dto/verify-driver.dto';
+import { DriverExpensesQueryDto } from './dto/driver-expenses-query.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { AllowApiKey } from '../common/decorators/allow-api-key.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
-import { PaginationQueryDto } from '../common/dto/pagination.dto';
 
 @ApiTags('Drivers')
 @ApiBearerAuth()
@@ -52,7 +52,9 @@ export class DriversController {
   @ApiOperation({
     summary: 'Verificar conductor por cédula y celular (n8n / WhatsApp)',
     description:
-      'Devuelve el conductor solo si cédula y celular coinciden y el estado es ACTIVE.',
+      'Éxito si cédula + celular coinciden (ACTIVE o INACTIVE). ' +
+      'Inactivo: verified=true, canCreateExpenses=false (solo consulta). ' +
+      '404 unificado si la identidad no coincide.',
   })
   verify(@Body() dto: VerifyDriverDto) {
     return this.driversService.verifyByDocumentAndPhone(
@@ -67,6 +69,7 @@ export class DriversController {
   @ApiSecurity('api-key')
   @ApiOperation({
     summary: 'Verificar conductor (GET) por query document + phone',
+    description: 'Misma semántica y 404 unificado que POST /drivers/verify.',
   })
   verifyGet(@Query() query: VerifyDriverDto) {
     return this.driversService.verifyByDocumentAndPhone(
@@ -75,33 +78,37 @@ export class DriversController {
     );
   }
 
-  @Get('document/:document')
+  /**
+   * n8n — consultar gastos del conductor de la conversación.
+   * Requiere cédula (path) + phone (query); filtros status/from/to/merchant.
+   */
+  @Get('document/:document/expenses')
   @AllowApiKey()
-  @Roles(UserRole.ADMIN, UserRole.DRIVER)
+  @Roles(UserRole.ADMIN)
   @ApiSecurity('api-key')
   @ApiOperation({
-    summary: 'Buscar conductor solo por cédula (legacy)',
+    summary: 'Gastos del conductor (cédula + celular + filtros)',
     description:
-      'Preferir POST /drivers/verify con cédula + celular desde n8n.',
+      'Autoriza con document + phone. Filtros: status, from, to, merchant, page, limit. ' +
+      'Cada ítem incluye status (enum) y statusLabel (español).',
+  })
+  findExpensesByDocument(
+    @Param('document') document: string,
+    @Query() query: DriverExpensesQueryDto,
+  ) {
+    return this.driversService.findExpensesForIdentity(document, query);
+  }
+
+  /** Solo JWT admin del panel — no API Key (evita filtrar datos con solo cédula). */
+  @Get('document/:document')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Buscar conductor por cédula (solo panel JWT admin)',
+    description:
+      'No disponible con API Key. n8n debe usar POST/GET /drivers/verify con cédula + celular.',
   })
   findByDocument(@Param('document') document: string) {
     return this.driversService.findByDocument(document);
-  }
-
-  @Get('document/:document/expenses')
-  @AllowApiKey()
-  @Roles(UserRole.ADMIN, UserRole.DRIVER)
-  @ApiSecurity('api-key')
-  @ApiOperation({ summary: 'Gastos de un conductor por cédula' })
-  findExpensesByDocument(
-    @Param('document') document: string,
-    @Query() query: PaginationQueryDto,
-  ) {
-    return this.driversService.findExpensesByDocument(
-      document,
-      query.page,
-      query.limit,
-    );
   }
 
   @Get(':id')
