@@ -3,12 +3,22 @@ import { ExpenseStatus } from '@prisma/client';
 import {
   IsDateString,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
   MinLength,
 } from 'class-validator';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
+
+export const EXPENSE_SORT_FIELDS = [
+  'merchantName',
+  'expenseDate',
+  'amount',
+  'createdAt',
+] as const;
+
+export type ExpenseSortField = (typeof EXPENSE_SORT_FIELDS)[number];
 
 export class ExpensesQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional()
@@ -60,4 +70,20 @@ export class ExpensesQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsDateString()
   to?: string;
+
+  @ApiPropertyOptional({
+    enum: EXPENSE_SORT_FIELDS,
+    description: 'Campo de orden (default expenseDate)',
+  })
+  @IsOptional()
+  @IsIn([...EXPENSE_SORT_FIELDS])
+  sortBy?: ExpenseSortField;
+
+  @ApiPropertyOptional({
+    enum: ['asc', 'desc'],
+    description: 'Dirección de orden (default desc)',
+  })
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sortOrder?: 'asc' | 'desc';
 }

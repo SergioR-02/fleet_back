@@ -18,6 +18,7 @@ import {
   formatDateOnly,
   toDateOnlyUtc,
 } from '../common/utils/date-only';
+import { likePattern } from '../common/utils/accent';
 import { ApiErrorCode } from '../common/errors/api-error-codes';
 import { apiError } from '../common/errors/api-error';
 
@@ -58,13 +59,40 @@ export class DriversService {
     const where: Prisma.DriverWhereInput = {};
 
     if (query.status) where.status = query.status;
-    if (query.search) {
-      const s = query.search.trim();
-      where.OR = [
-        { document: { contains: s, mode: 'insensitive' } },
-        { name: { contains: s, mode: 'insensitive' } },
-        { plate: { contains: s, mode: 'insensitive' } },
-      ];
+    if (query.search?.trim()) {
+      const pattern = likePattern(query.search);
+      const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+        SELECT d.id
+        FROM fleet.drivers d
+        WHERE translate(
+          lower(d.document),
+          'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ',
+          'aaaaaeeeeiiiiooooouuuuncaaaaaeeeeiiiiooooouuuunc'
+        ) LIKE ${pattern}
+           OR translate(
+          lower(d.name),
+          'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ',
+          'aaaaaeeeeiiiiooooouuuuncaaaaaeeeeiiiiooooouuuunc'
+        ) LIKE ${pattern}
+           OR translate(
+          lower(COALESCE(d.plate, '')),
+          'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ',
+          'aaaaaeeeeiiiiooooouuuuncaaaaaeeeeiiiiooooouuuunc'
+        ) LIKE ${pattern}
+      `;
+      const ids = rows.map((r) => r.id);
+      if (ids.length === 0) {
+        return {
+          data: [],
+          meta: {
+            page,
+            limit,
+            total: 0,
+            totalPages: 1,
+          },
+        };
+      }
+      where.id = { in: ids };
     }
 
     const [total, rows] = await this.prisma.$transaction([

@@ -24,6 +24,7 @@ import {
   normalizeDateOnly,
   toDateOnlyUtc,
 } from '../common/utils/date-only';
+import { likePattern } from '../common/utils/accent';
 import { ApiErrorCode } from '../common/errors/api-error-codes';
 import { apiError } from '../common/errors/api-error';
 
@@ -185,26 +186,83 @@ export class ExpensesService {
     }
 
     if (query.status) where.status = query.status;
-    if (query.merchant) {
-      where.merchantName = {
-        contains: query.merchant.trim(),
-        mode: 'insensitive',
-      };
+
+    // Búsqueda y comercio sin tildes: filtra por ids con SQL translate
+    const idFilters: string[][] = [];
+
+    if (query.merchant?.trim()) {
+      const pattern = likePattern(query.merchant);
+      const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+        SELECT e.id
+        FROM expenses.expenses e
+        WHERE translate(
+          lower(e.merchant_name),
+          'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ',
+          'aaaaaeeeeiiiiooooouuuuncaaaaaeeeeiiiiooooouuuunc'
+        ) LIKE ${pattern}
+      `;
+      idFilters.push(rows.map((r) => r.id));
     }
+
+    if (query.search?.trim()) {
+      const pattern = likePattern(query.search);
+      const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+        SELECT e.id
+        FROM expenses.expenses e
+        INNER JOIN fleet.drivers d ON d.id = e.driver_id
+        WHERE translate(
+          lower(e.merchant_name),
+          'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ',
+          'aaaaaeeeeiiiiooooouuuuncaaaaaeeeeiiiiooooouuuunc'
+        ) LIKE ${pattern}
+           OR translate(
+          lower(e.nit),
+          'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ',
+          'aaaaaeeeeiiiiooooouuuuncaaaaaeeeeiiiiooooouuuunc'
+        ) LIKE ${pattern}
+           OR translate(
+          lower(d.name),
+          'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ',
+          'aaaaaeeeeiiiiooooouuuuncaaaaaeeeeiiiiooooouuuunc'
+        ) LIKE ${pattern}
+           OR translate(
+          lower(d.document),
+          'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ',
+          'aaaaaeeeeiiiiooooouuuuncaaaaaeeeeiiiiooooouuuunc'
+        ) LIKE ${pattern}
+      `;
+      idFilters.push(rows.map((r) => r.id));
+    }
+
+    if (idFilters.length > 0) {
+      let ids = idFilters[0];
+      for (let i = 1; i < idFilters.length; i++) {
+        const set = new Set(idFilters[i]);
+        ids = ids.filter((id) => set.has(id));
+      }
+      if (ids.length === 0) {
+        return {
+          data: [],
+          meta: {
+            page,
+            limit,
+            total: 0,
+            totalPages: 1,
+          },
+        };
+      }
+      where.id = { in: ids };
+    }
+
     if (query.from || query.to) {
       where.expenseDate = {};
       if (query.from) where.expenseDate.gte = toDateOnlyUtc(query.from);
       if (query.to) where.expenseDate.lte = toDateOnlyUtc(query.to);
     }
-    if (query.search) {
-      const s = query.search.trim();
-      where.OR = [
-        { merchantName: { contains: s, mode: 'insensitive' } },
-        { nit: { contains: s, mode: 'insensitive' } },
-        { driver: { name: { contains: s, mode: 'insensitive' } } },
-        { driver: { document: { contains: s, mode: 'insensitive' } } },
-      ];
-    }
+
+    const sortBy = query.sortBy ?? 'expenseDate';
+    const sortOrder = query.sortOrder ?? 'desc';
+    const orderBy = { [sortBy]: sortOrder } as Prisma.ExpenseOrderByWithRelationInput;
 
     const [total, rows] = await this.prisma.$transaction([
       this.prisma.expense.count({ where }),
@@ -213,7 +271,7 @@ export class ExpensesService {
         include: {
           driver: { select: { id: true, name: true, document: true } },
         },
-        orderBy: { expenseDate: 'desc' },
+        orderBy,
         skip: (page - 1) * limit,
         take: limit,
       }),
